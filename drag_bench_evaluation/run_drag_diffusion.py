@@ -42,6 +42,8 @@ from drag_pipeline import DragPipeline
 
 from utils.drag_utils import drag_diffusion_update
 from utils.attn_utils import register_attention_editor_diffusers, MutualSelfAttentionControl
+from utils.lora_utils import train_lora
+import tqdm
 
 
 def preprocess_image(image,
