@@ -176,14 +176,16 @@ def drag_diffusion_update(
 
     return init_code, opt_seq
 
-def drag_diffusion_update_gen(model,
-                              init_code,
-                              text_embeddings,
-                              t,
-                              handle_points,
-                              target_points,
-                              mask,
-                              args):
+def drag_diffusion_update_gen(
+        model: DragPipeline,
+        init_code,
+        text_embeddings,
+        t,
+        handle_points,
+        target_points,
+        mask,
+        args,
+    ):
 
     assert len(handle_points) == len(target_points), \
         "number of handle point must equals target points"
@@ -204,12 +206,22 @@ def drag_diffusion_update_gen(model,
     # the init output feature of unet
     with torch.no_grad():
         if args.guidance_scale > 1.:
+            # use CFG
             model_inputs_0 = copy.deepcopy(torch.cat([init_code] * 2))
         else:
             model_inputs_0 = copy.deepcopy(init_code)
-        unet_output, F0 = model.forward_unet_features(model_inputs_0, t, encoder_hidden_states=text_embeddings,
-            layer_idx=args.unet_feature_idx, interp_res_h=args.sup_res_h, interp_res_w=args.sup_res_w)
+        
+        unet_output, F0 = model.forward_unet_features(
+            model_inputs_0, 
+            t, 
+            encoder_hidden_states=text_embeddings,
+            layer_idx=args.unet_feature_idx, 
+            interp_res_h=args.sup_res_h, 
+            interp_res_w=args.sup_res_w
+        )
         if args.guidance_scale > 1.:
+            # if CFG than work with conditional and unconditional feature maps
+
             # strategy 1: discard the unconditional branch feature maps
             # F0 = F0[1].unsqueeze(dim=0)
             # strategy 2: concat pos and neg branch feature maps for motion-sup and point tracking
@@ -226,6 +238,7 @@ def drag_diffusion_update_gen(model,
     # prepare optimizable init_code and optimizer
     init_code.requires_grad_(True)
     optimizer = torch.optim.Adam([init_code], lr=args.lr)
+    opt_seq = [init_code.detach().clone()]
 
     # prepare for point tracking and background regularization
     handle_points_init = copy.deepcopy(handle_points)
@@ -234,7 +247,6 @@ def drag_diffusion_update_gen(model,
 
     # prepare amp scaler for mixed-precision training
     scaler = torch.cuda.amp.GradScaler()
-    opt_seq = [init_code.detach().clone()]
     for step_idx in range(args.n_pix_step):
         with torch.autocast(device_type='cuda', dtype=torch.float16):
             if args.guidance_scale > 1.:
