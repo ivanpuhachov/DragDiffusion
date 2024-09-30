@@ -246,9 +246,9 @@ def run_drag(source_image,
     # preparing editing meta data (handle, target, mask)
     mask = torch.from_numpy(mask).float() / 255.
     mask[mask > 0.0] = 1.0
-    mask = rearrange(mask, "h w -> 1 1 h w").cuda()
+    mask_original = rearrange(mask, "h w -> 1 1 h w").cuda()
     # mask is now binary, 11HW
-    mask = F.interpolate(mask, (args.sup_res_h, args.sup_res_w), mode="nearest")  # mask has size 1 x 1 x sup_res_h x sup_res_h
+    mask = F.interpolate(mask_original, (args.sup_res_h, args.sup_res_w), mode="nearest")  # mask has size 1 x 1 x sup_res_h x sup_res_h
 
 
     # parsing points into handle and target
@@ -366,6 +366,7 @@ def run_drag(source_image,
         os.mkdir(save_dir)
     save_prefix = datetime.datetime.now().strftime("%Y-%m-%d-%H%M-%S")
     save_image(save_result, os.path.join(save_dir, save_prefix + '.png'))
+    torch.save(mask_original, os.path.join(save_dir, save_prefix +'_mask.pt'))
 
     if save_seq:
         os.mkdir(os.path.join(save_dir, save_prefix))
