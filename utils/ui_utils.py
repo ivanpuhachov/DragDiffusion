@@ -166,6 +166,10 @@ def train_lora_interface(original_image,
 def preprocess_image(image,
                      device,
                      dtype=torch.float32):
+    """
+    From numpy to tensor, [0, 255] to [-1, 1], (H, W, C) to (1, C, H, W)
+    @return: tensor (1, C, H, W), [-1, 1]
+    """
     image = torch.from_numpy(image).float() / 127.5 - 1 # [-1, 1]
     image = rearrange(image, "h w c -> 1 c h w")
     image = image.to(device, dtype)
@@ -175,7 +179,7 @@ def run_drag(source_image,
              image_with_clicks,
              mask,
              prompt,
-             points,
+             points,  # list of pixel coordinates of handle and target points
              inversion_strength,
              lam,
              latent_lr,
@@ -193,9 +197,12 @@ def run_drag(source_image,
     scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012,
                           beta_schedule="scaled_linear", clip_sample=False,
                           set_alpha_to_one=False, steps_offset=1)
-    model = DragPipeline.from_pretrained(model_path, scheduler=scheduler, torch_dtype=torch.float16)
+    model: DragPipeline = DragPipeline.from_pretrained(model_path, scheduler=scheduler, torch_dtype=torch.float16)
+    
     # call this function to override unet forward function,
     # so that intermediate features are returned after forward
+    # The only difference from diffusers:
+    # return intermediate UNet features of all UpSample blocks
     model.modify_unet_forward()
 
     # set vae
@@ -218,7 +225,7 @@ def run_drag(source_image,
     args.n_actual_inference_step = round(inversion_strength * args.n_inference_step)
     args.guidance_scale = 1.0
 
-    args.unet_feature_idx = [3]
+    args.unet_feature_idx = [3]  # only use the output of the last UNet block
 
     args.r_m = 1
     args.r_p = 3
@@ -240,14 +247,22 @@ def run_drag(source_image,
     mask = torch.from_numpy(mask).float() / 255.
     mask[mask > 0.0] = 1.0
     mask = rearrange(mask, "h w -> 1 1 h w").cuda()
-    mask = F.interpolate(mask, (args.sup_res_h, args.sup_res_w), mode="nearest")
+    # mask is now binary, 11HW
+    mask = F.interpolate(mask, (args.sup_res_h, args.sup_res_w), mode="nearest")  # mask has size 1 x 1 x sup_res_h x sup_res_h
 
+
+    # parsing points into handle and target
     handle_points = []
     target_points = []
     # here, the point is in x,y coordinate
     for idx, point in enumerate(points):
-        cur_point = torch.tensor([point[1]/full_h*args.sup_res_h, point[0]/full_w*args.sup_res_w])
+        cur_point = torch.tensor(
+            [
+                point[1] / full_h * args.sup_res_h, 
+                point[0] / full_w * args.sup_res_w, 
+            ])
         cur_point = torch.round(cur_point)
+        
         if idx % 2 == 0:
             handle_points.append(cur_point)
         else:
@@ -268,12 +283,15 @@ def run_drag(source_image,
 
     # invert the source image
     # the latent code resolution is too small, only 64*64
-    invert_code = model.invert(source_image,
-                               prompt,
-                               encoder_hidden_states=text_embeddings,
-                               guidance_scale=args.guidance_scale,
-                               num_inference_steps=args.n_inference_step,
-                               num_actual_inference_steps=args.n_actual_inference_step)
+    # DDIM inversion
+    invert_code = model.invert(
+        source_image,
+        prompt,
+        encoder_hidden_states=text_embeddings,
+        guidance_scale=args.guidance_scale,
+        num_inference_steps=args.n_inference_step,
+        num_actual_inference_steps=args.n_actual_inference_step,
+        )
 
     # empty cache to save memory
     torch.cuda.empty_cache()
@@ -298,6 +316,9 @@ def run_drag(source_image,
         target_points,
         mask,
         args)
+    
+    print('------------')
+    print('opt_seq: ', len(opt_seq))
 
     updated_init_code = updated_init_code.half()
     text_embeddings = text_embeddings.half()

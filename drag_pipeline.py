@@ -409,6 +409,11 @@ class DragPipeline(StableDiffusionPipeline):
 
     @torch.no_grad()
     def image2latent(self, image):
+        """
+        image to latent
+        @param image: [torch BCHW] in [-1, 1] OR PIL Image
+        @return: latent code after VAE, BCHW (B x 4 x 64 x 64)
+        """
         DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         if type(image) is Image:
             image = np.array(image)

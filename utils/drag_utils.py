@@ -19,6 +19,7 @@
 import copy
 import torch
 import torch.nn.functional as F
+from drag_pipeline import DragPipeline
 
 
 def point_tracking(F0,
@@ -76,14 +77,16 @@ def interpolate_feature_patch(feat,
 
     return Ia * wa + Ib * wb + Ic * wc + Id * wd
 
-def drag_diffusion_update(model,
-                          init_code,
-                          text_embeddings,
-                          t,
-                          handle_points,
-                          target_points,
-                          mask,
-                          args):
+def drag_diffusion_update(
+        model: DragPipeline,
+        init_code,
+        text_embeddings,
+        t,
+        handle_points,
+        target_points,
+        mask,
+        args,
+    ):
 
     assert len(handle_points) == len(target_points), \
         "number of handle point must equals target points"
@@ -92,10 +95,15 @@ def drag_diffusion_update(model,
 
     # the init output feature of unet
     with torch.no_grad():
-        unet_output, F0 = model.forward_unet_features(init_code, t,
+        unet_output, F0 = model.forward_unet_features(
+            init_code, 
+            t,
             encoder_hidden_states=text_embeddings,
-            layer_idx=args.unet_feature_idx, interp_res_h=args.sup_res_h, interp_res_w=args.sup_res_w)
-        x_prev_0,_ = model.step(unet_output, t, init_code)
+            layer_idx=args.unet_feature_idx,
+            interp_res_h=args.sup_res_h,
+            interp_res_w=args.sup_res_w,
+        )
+        x_prev_0, _ = model.step(unet_output, t, init_code)
         # init_code_orig = copy.deepcopy(init_code)
 
     # prepare optimizable init_code and optimizer
@@ -141,7 +149,13 @@ def drag_diffusion_update(model,
                 r1, r2 = max(0,int(pi[0])-args.r_m), min(max_r,int(pi[0])+args.r_m+1)
                 c1, c2 = max(0,int(pi[1])-args.r_m), min(max_c,int(pi[1])+args.r_m+1)
                 f0_patch = F1[:,:,r1:r2, c1:c2].detach()
-                f1_patch = interpolate_feature_patch(F1,r1+di[0],r2+di[0],c1+di[1],c2+di[1])
+                f1_patch = interpolate_feature_patch(
+                    feat=F1,
+                    y1=r1+di[0],
+                    y2=r2+di[0],
+                    x1=c1+di[1],
+                    x2=c2+di[1],
+                )
 
                 # original code, without boundary protection
                 # f0_patch = F1[:,:,int(pi[0])-args.r_m:int(pi[0])+args.r_m+1, int(pi[1])-args.r_m:int(pi[1])+args.r_m+1].detach()
