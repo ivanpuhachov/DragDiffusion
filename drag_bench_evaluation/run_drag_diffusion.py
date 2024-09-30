@@ -202,7 +202,7 @@ def run_drag(source_image,
     return out_image
 
 
-if __name__ == '__main__':
+def run_benchmark():
     parser = argparse.ArgumentParser(description="setting arguments")
     parser.add_argument('--lora_steps', type=int, help='number of lora fine-tuning steps')
     parser.add_argument('--inv_strength', type=float, help='inversion strength')
@@ -280,3 +280,43 @@ if __name__ == '__main__':
             if not os.path.isdir(save_dir):
                 os.mkdir(save_dir)
             Image.fromarray(out_image).save(os.path.join(save_dir, 'dragged_image.png'))
+
+
+if __name__ == '__main__':
+    # sample_path = os.path.join(file_dir, sample_name)
+
+    # read image file
+    source_image = Image.open('../lion_stock.jpg')
+    source_image = np.array(source_image)
+
+    # load meta data
+    # with open(os.path.join(sample_path, 'meta_data.pkl'), 'rb') as f:
+    #     meta_data = pickle.load(f)
+    prompt = "a lion"
+    mask = torch.load('../lion_mask.pt').cpu().squeeze(0).squeeze(0).numpy()
+    points = [[123., 133.], [122., 168.]]
+
+    # load lora
+    lora_path = os.path.join("../lora_tmp/")
+    print("applying lora: " + lora_path)
+
+    out_image = run_drag(
+        source_image,
+        mask,
+        prompt,
+        points,
+        inversion_strength=0.7,
+        lam=0.1,
+        latent_lr=0.01,
+        unet_feature_idx=3,
+        n_pix_step=10,
+        model_path="runwayml/stable-diffusion-v1-5",
+        vae_path="default",
+        lora_path=lora_path,
+        start_step=0,
+        start_layer=10,
+    )
+    save_dir = "../results"
+    if not os.path.isdir(save_dir):
+        os.mkdir(save_dir)
+    Image.fromarray(out_image).save(os.path.join(save_dir, 'dragged_image.png'))

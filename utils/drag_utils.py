@@ -87,6 +87,12 @@ def drag_diffusion_update(
         mask,
         args,
     ):
+    """
+    Optimize init_code by moving handle_points to target_points.
+    """
+
+    print('handle points: ', handle_points)
+    print('target points: ', target_points)
 
     assert len(handle_points) == len(target_points), \
         "number of handle point must equals target points"
