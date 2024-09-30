@@ -294,11 +294,28 @@ if __name__ == '__main__':
     #     meta_data = pickle.load(f)
     prompt = "a lion"
     mask = torch.load('../lion_mask.pt').cpu().squeeze(0).squeeze(0).numpy()
+    print(mask.shape)
+    print(mask)
+    save_dir = "../results"
+    Image.fromarray(np.uint8(mask * 255) , 'L').save(os.path.join(save_dir, 'mask.png'))
+
     points = [[123., 133.], [122., 168.]]
 
     # load lora
     lora_path = os.path.join("../lora_tmp/")
-    print("applying lora: " + lora_path)
+    # print("applying lora: " + lora_path)
+    train_lora(
+        image=source_image,
+        prompt=prompt,
+        model_path="runwayml/stable-diffusion-v1-5",
+        vae_path="default",
+        save_lora_path=lora_path,
+        lora_lr=5e-4,
+        lora_batch_size=4,
+        lora_rank=16,
+        lora_step=80,
+        progress=tqdm,
+    )
 
     out_image = run_drag(
         source_image,
@@ -316,7 +333,6 @@ if __name__ == '__main__':
         start_step=0,
         start_layer=10,
     )
-    save_dir = "../results"
     if not os.path.isdir(save_dir):
         os.mkdir(save_dir)
     Image.fromarray(out_image).save(os.path.join(save_dir, 'dragged_image.png'))
