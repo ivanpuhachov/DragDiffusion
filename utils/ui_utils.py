@@ -37,6 +37,7 @@ from drag_pipeline import DragPipeline
 
 from torchvision.utils import save_image
 from pytorch_lightning import seed_everything
+import pickle
 
 from .drag_utils import drag_diffusion_update, drag_diffusion_update_gen
 from .lora_utils import train_lora
@@ -175,23 +176,45 @@ def preprocess_image(image,
     image = image.to(device, dtype)
     return image
 
-def run_drag(source_image,
-             image_with_clicks,
-             mask,
-             prompt,
-             points,  # list of pixel coordinates of handle and target points
-             inversion_strength,
-             lam,
-             latent_lr,
-             n_pix_step,
-             model_path,
-             vae_path,
-             lora_path,
-             start_step,
-             start_layer,
-             save_dir="./results",
-             save_seq=True,
+def run_drag(
+        source_image,  # 512,512,3 numpy image [0,255]
+        image_with_clicks,  # 512 512 3, used only to store results
+        mask,  # 512, 512 numpy mask, 255 is inside
+        prompt,
+        points,  # list of pixel coordinates of [[handle], [target], [h2],[t2]] points
+        inversion_strength=0.7,  # (0,1) - at which level optimization happens
+        lam=0.1,  # opt parameter
+        latent_lr=0.01,
+        n_pix_step=80,  # n optimization steps
+        model_path="runwayml/stable-diffusion-v1-5",  # "runwayml/stable-diffusion-v1-5"
+        vae_path="default",  # "default"
+        lora_path="",  # "./lora_tmp"
+        start_step=0,  # used in MutualSelfAttentionControl only -> the step to start mutual self-attention control
+        start_layer=10,  # used in MutualSelfAttentionControl only -> the layer to start mutual self-attention control
+        save_dir="./results",
+        save_seq=True,
     ):
+    # Save inputs using pickle
+    inputs = {
+        'source_image': source_image,
+        'image_with_clicks': image_with_clicks,
+        'mask': mask,
+        'prompt': prompt,
+        'points': points,
+        'inversion_strength': inversion_strength,
+        'lam': lam,
+        'latent_lr': latent_lr,
+        'n_pix_step': n_pix_step,
+        'model_path': model_path,
+        'vae_path': vae_path,
+        'lora_path': lora_path,
+        'start_step': start_step,
+        'start_layer': start_layer
+    }
+    
+    with open('inputs.pkl', 'wb') as f:
+        pickle.dump(inputs, f)
+
     # initialize model
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     scheduler = DDIMScheduler(beta_start=0.00085, beta_end=0.012,
@@ -221,8 +244,10 @@ def run_drag(source_image,
     args = SimpleNamespace()
     args.prompt = prompt
     args.points = points
-    args.n_inference_step = 50
+    args.n_inference_step = 50  # n denoising steps from pure noise
+    # we do deformations at some level (inversion_strength in [0,1]), denoise from there
     args.n_actual_inference_step = round(inversion_strength * args.n_inference_step)
+    # CFG guidance
     args.guidance_scale = 1.0
 
     args.unet_feature_idx = [3]  # only use the output of the last UNet block
