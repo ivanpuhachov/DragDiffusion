@@ -37,6 +37,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.training_utils import unet_lora_state_dict
 from diffusers.utils import check_min_version, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
+import tqdm
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0")
@@ -98,24 +99,43 @@ def encode_prompt(text_encoder, input_ids, attention_mask, text_encoder_use_atte
     return prompt_embeds
 
 # model_path: path of the model
-# image: input image, have not been pre-processed
+# image: input image, have not been pre-processed, numpy array (H, W, C), int, 0..255
 # save_lora_path: the path to save the lora
 # prompt: the user input prompt
 # lora_step: number of lora training step
 # lora_lr: learning rate of lora training
 # lora_rank: the rank of lora
 # save_interval: the frequency of saving lora checkpoints
-def train_lora(image,
-    prompt,
-    model_path,
-    vae_path,
-    save_lora_path,
-    lora_step,
-    lora_lr,
-    lora_batch_size,
-    lora_rank,
-    progress,
-    save_interval=-1):
+def train_lora(
+        image,
+        prompt,
+        model_path,  # "runwayml/stable-diffusion-v1-5"
+        vae_path="default",  # "default"
+        save_lora_path="./lora_tmp",
+        lora_step=80,
+        lora_lr=5e-4,
+        lora_batch_size=4,
+        lora_rank=16,
+        progress=tqdm,
+        save_interval=-1,
+    ):
+    """
+    This function trains LoRA (Low-Rank Adaptation) layers on a given input image and prompt using a 
+    pre-trained diffusion model, saving the trained LoRA layers for later use.
+
+    Args:
+        image (numpy array): The input image to train on, in numpy array format (H, W, C), with values ranging from 0 to 255.
+        prompt (str): The text prompt provided by the user.
+        model_path (str): Path to the pre-trained model.
+        vae_path (str): Path to the VAE (Variational Autoencoder) model. Use "default" to employ the VAE from the model_path.
+        save_lora_path (str): Directory path to save the trained LoRA layers.
+        lora_step (int): Number of training steps for LoRA.
+        lora_lr (float): Learning rate for training LoRA layers.
+        lora_batch_size (int): Batch size for LoRA training.
+        lora_rank (int): The rank of LoRA, controlling the parameter efficiency.
+        progress: progress bar vis.
+        save_interval (int, optional): Interval at which to save LoRA checkpoints. -1 - no saving
+    """
     # initialize accelerator
     accelerator = Accelerator(
         gradient_accumulation_steps=1,
