@@ -8,6 +8,7 @@ from einops import rearrange
 from types import SimpleNamespace
 from torchvision.utils import save_image
 from pytorch_lightning import seed_everything
+import copy
 
 import datetime
 import PIL
@@ -22,8 +23,116 @@ from drag_pipeline import DragPipeline
 
 
 from utils.ui_utils import preprocess_image
-from utils.drag_utils import drag_diffusion_update
+from utils.drag_utils import point_tracking, interpolate_feature_patch, check_handle_reach_target
 from utils.attn_utils import register_attention_editor_diffusers, MutualSelfAttentionControl
+
+
+def drag_diffusion_update(
+        model: DragPipeline,
+        init_code,
+        text_embeddings,
+        t,
+        handle_points,
+        target_points,
+        mask,
+        args,
+    ):
+    """
+    Optimize init_code by moving handle_points to target_points.
+    """
+
+    print('handle points: ', handle_points)
+    print('target points: ', target_points)
+
+    assert len(handle_points) == len(target_points), \
+        "number of handle point must equals target points"
+    if text_embeddings is None:
+        text_embeddings = model.get_text_embeddings(args.prompt)
+
+    # the init output feature of unet
+    with torch.no_grad():
+        unet_output, F0 = model.forward_unet_features(
+            init_code, 
+            t,
+            encoder_hidden_states=text_embeddings,
+            layer_idx=args.unet_feature_idx,
+            interp_res_h=args.sup_res_h,
+            interp_res_w=args.sup_res_w,
+        )
+        x_prev_0, _ = model.step(unet_output, t, init_code)
+        # init_code_orig = copy.deepcopy(init_code)
+
+    # prepare optimizable init_code and optimizer
+    init_code.requires_grad_(True)
+    optimizer = torch.optim.Adam([init_code], lr=args.lr)
+    opt_seq = [init_code.detach().clone()]
+
+    # prepare for point tracking and background regularization
+    handle_points_init = copy.deepcopy(handle_points)
+    interp_mask = F.interpolate(mask, (init_code.shape[2],init_code.shape[3]), mode='nearest')
+    using_mask = interp_mask.sum() != 0.0
+
+    # prepare amp scaler for mixed-precision training
+    scaler = torch.cuda.amp.GradScaler()
+    for step_idx in range(args.n_pix_step):
+        with torch.autocast(device_type='cuda', dtype=torch.float16):
+            unet_output, F1 = model.forward_unet_features(init_code, t,
+                encoder_hidden_states=text_embeddings,
+                layer_idx=args.unet_feature_idx, interp_res_h=args.sup_res_h, interp_res_w=args.sup_res_w)
+            # F1 is tensor ([1, 640, 256, 256])
+            x_prev_updated,_ = model.step(unet_output, t, init_code)
+
+            # do point tracking to update handle points before computing motion supervision loss
+            if step_idx != 0:
+                handle_points = point_tracking(F0, F1, handle_points, handle_points_init, args)
+                print('new handle points', handle_points)
+
+            # break if all handle points have reached the targets
+            if check_handle_reach_target(handle_points, target_points):
+                break
+
+            loss = 0.0
+            _, _, max_r, max_c = F0.shape
+            for i in range(len(handle_points)):
+                pi, ti = handle_points[i], target_points[i]
+                # skip if the distance between target and source is less than 1
+                if (ti - pi).norm() < 2.:
+                    continue
+
+                di = (ti - pi) / (ti - pi).norm()
+
+                # motion supervision
+                # with boundary protection
+                r1, r2 = max(0,int(pi[0])-args.r_m), min(max_r,int(pi[0])+args.r_m+1)
+                c1, c2 = max(0,int(pi[1])-args.r_m), min(max_c,int(pi[1])+args.r_m+1)
+                f0_patch = F1[:,:,r1:r2, c1:c2].detach()
+                f1_patch = interpolate_feature_patch(
+                    feat=F1,
+                    y1=r1+di[0],
+                    y2=r2+di[0],
+                    x1=c1+di[1],
+                    x2=c2+di[1],
+                )
+
+                # original code, without boundary protection
+                # f0_patch = F1[:,:,int(pi[0])-args.r_m:int(pi[0])+args.r_m+1, int(pi[1])-args.r_m:int(pi[1])+args.r_m+1].detach()
+                # f1_patch = interpolate_feature_patch(F1, pi[0] + di[0], pi[1] + di[1], args.r_m)
+                loss += ((2*args.r_m+1)**2)*F.l1_loss(f0_patch, f1_patch)
+
+            # masked region must stay unchanged
+            if using_mask:
+                loss += args.lam * ((x_prev_updated-x_prev_0)*(1.0-interp_mask)).abs().sum()
+            # loss += args.lam * ((init_code_orig-init_code)*(1.0-interp_mask)).abs().sum()
+            print('loss total=%f'%(loss.item()))
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        optimizer.zero_grad()
+        opt_seq.append(init_code.detach().clone())
+
+    return init_code, opt_seq
+
 
 def run_drag(
         source_image,  # 512,512,3 numpy image [0,255]
@@ -270,6 +379,7 @@ def run_drag(
 if __name__ == "__main__":
     with open('inputs.pkl', 'rb') as f:
         inputs = pickle.load(f)
+    inputs['save_seq'] = False
     run_drag(
         **inputs,
     )
