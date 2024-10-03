@@ -23,8 +23,36 @@ from drag_pipeline import DragPipeline
 
 
 from utils.ui_utils import preprocess_image
-from utils.drag_utils import point_tracking, interpolate_feature_patch, check_handle_reach_target
+from utils.drag_utils import point_tracking, check_handle_reach_target
 from utils.attn_utils import register_attention_editor_diffusers, MutualSelfAttentionControl
+
+
+def interpolate_feature_patch(
+        feat,
+        y1,
+        y2,
+        x1,
+        x2,
+):
+    x1_floor = torch.floor(x1).long()
+    x1_cell = x1_floor + 1
+    dx = torch.floor(x2).long() - torch.floor(x1).long()
+
+    y1_floor = torch.floor(y1).long()
+    y1_cell = y1_floor + 1
+    dy = torch.floor(y2).long() - torch.floor(y1).long()
+
+    wa = (x1_cell.float() - x1) * (y1_cell.float() - y1)
+    wb = (x1_cell.float() - x1) * (y1 - y1_floor.float())
+    wc = (x1 - x1_floor.float()) * (y1_cell.float() - y1)
+    wd = (x1 - x1_floor.float()) * (y1 - y1_floor.float())
+
+    Ia = feat[:, :, y1_floor: y1_floor+dy, x1_floor: x1_floor+dx]
+    Ib = feat[:, :, y1_cell: y1_cell+dy, x1_floor: x1_floor+dx]
+    Ic = feat[:, :, y1_floor: y1_floor+dy, x1_cell: x1_cell+dx]
+    Id = feat[:, :, y1_cell: y1_cell+dy, x1_cell: x1_cell+dx]
+
+    return Ia * wa + Ib * wb + Ic * wc + Id * wd
 
 
 def drag_diffusion_update(
