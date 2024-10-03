@@ -26,9 +26,17 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from diffusers import StableDiffusionPipeline
 
+# this import is unused, use it for UNet reference
+from diffusers import AutoencoderKL, UNet2DConditionModel
+
 # override unet forward
 # The only difference from diffusers:
 # return intermediate UNet features of all UpSample blocks
+# see UNet2DConditionModel
+# all changes are related to new variable
+# all_intermediate_features
+
+
 def override_forward(self):
 
     def forward(
@@ -44,7 +52,8 @@ def override_forward(self):
         mid_block_additional_residual: Optional[torch.Tensor] = None,
         down_intrablock_additional_residuals: Optional[Tuple[torch.Tensor]] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        return_intermediates: bool = False,
+        # return_dict: bool = True,  # this comes from diffusers UNet2DConditionModel
+        return_intermediates: bool = False,  # this is a new argument
     ):
         # By default samples have to be AT least a multiple of the overall upsampling factor.
         # The overall upsampling factor is equal to 2 ** (# num of upsampling layers).
@@ -350,6 +359,13 @@ def override_forward(self):
         # if USE_PEFT_BACKEND:
         #     # remove `lora_scale` from each PEFT layer
         #     unscale_lora_layers(self, lora_scale)
+
+        # diffusers vanilla return
+        # if not return_dict:
+        #     return (sample,)
+        #
+        # return UNet2DConditionOutput(sample=sample)
+        # ----------
 
         # only difference from diffusers, return intermediate results
         if return_intermediates:
