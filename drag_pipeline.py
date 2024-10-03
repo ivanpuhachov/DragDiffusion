@@ -481,15 +481,24 @@ class DragPipeline(StableDiffusionPipeline):
         encoder_hidden_states,
         layer_idx=[0],
         interp_res_h=256,
-        interp_res_w=256):
+        interp_res_w=256,
+    ):
         unet_output, all_intermediate_features = self.unet(
             z,
             t,
             encoder_hidden_states=encoder_hidden_states,
             return_intermediates=True
             )
+        # all_intermediate_features is a list of 5 elements - features from upsample part of UNet
+        # torch.Size([1, 1280, 8, 8])
+        # torch.Size([1, 1280, 16, 16])
+        # torch.Size([1, 1280, 32, 32])
+        # torch.Size([1, 640, 64, 64])
+        # torch.Size([1, 320, 64, 64])
+        # it does not have the final output
 
         all_return_features = []
+        # select only outputs from layer_idx list
         for idx in layer_idx:
             feat = all_intermediate_features[idx]
             feat = F.interpolate(feat, (interp_res_h, interp_res_w), mode='bilinear')
@@ -628,10 +637,11 @@ class DragPipeline(StableDiffusionPipeline):
                 model_inputs = latents
 
             # predict the noise
-            noise_pred = self.unet(model_inputs,
+            noise_pred = self.unet(
+                model_inputs,
                 t,
                 encoder_hidden_states=encoder_hidden_states,
-                )
+            )
             if guidance_scale > 1.:
                 noise_pred_uncon, noise_pred_con = noise_pred.chunk(2, dim=0)
                 noise_pred = noise_pred_uncon + guidance_scale * (noise_pred_con - noise_pred_uncon)
