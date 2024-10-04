@@ -9,7 +9,7 @@ def load_and_draw(
         sizes_list=None,
 ):
     img = Image.open(image_path).convert('RGBA')
-    return draw_on_image(img, points_list, sizes_list)
+    return draw_on_image(img, points_list, sizes_list, return_type=return_type)
 
 
 def draw_on_image(
@@ -56,6 +56,40 @@ def draw_on_image(
     else:
         raise NotImplementedError
 
+
+def get_concat_h(im1, im2):
+    """
+    concatenate horizontally 2 PIL images
+    """
+    dst = Image.new('RGB', (im1.width + im2.width, im1.height))
+    dst.paste(im1, (0, 0))
+    dst.paste(im2, (im1.width, 0))
+    return dst
+
+
+def overlap_mask(
+        img: Image,
+        mask: np.array,  # binary mask, 1 is inside
+):
+    # Ensure mask is in the correct format for alpha compositing
+    if (mask.ndim == 2) and (mask.max() < 2):  # Grayscale mask
+        mask_img = Image.fromarray(mask * 100 + 100).convert("L")  # Convert to a single channel 'L' image
+        mask_img = mask_img.convert("RGBA")
+    else:
+        raise ValueError("Unsupported mask format. Expected 2D and [0,1] mask")
+
+    # Resize mask to image size if necessary
+    if mask_img.size != img.size:
+        raise NotImplementedError(f"Mask and Image has different size! {mask_img.size} and {img.size}")
+    
+    mask_img.putalpha(100)
+    # Make sure img is in 'RGBA' mode for alpha compositing
+    img = img.convert("RGBA")
+
+    # Perform alpha compositing
+    result = Image.alpha_composite(img, mask_img)
+
+    return result
 
 
 def load_points_from_theater_json(
