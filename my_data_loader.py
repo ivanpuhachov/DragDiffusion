@@ -49,8 +49,12 @@ def draw_on_image(
             )
 
     out = Image.alpha_composite(img, txt)
-    out.save("test.png")
-    return np.array(out.convert("RGB"))
+    if return_type == "np":
+        return np.array(img.convert("RGB")), np.array(out.convert("RGB"))
+    elif return_type == "pil":
+        return img.convert("RGB"), out.convert("RGB")
+    else:
+        raise NotImplementedError
 
 
 
