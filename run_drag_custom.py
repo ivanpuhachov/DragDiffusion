@@ -26,7 +26,7 @@ from utils.ui_utils import preprocess_image
 from utils.drag_utils import point_tracking, check_handle_reach_target
 from utils.attn_utils import register_attention_editor_diffusers, MutualSelfAttentionControl
 
-from my_data_loader import draw_on_image, load_points_from_theater_json, load_and_draw
+from my_data_loader import draw_on_image, load_points_from_theater_json, load_and_draw, get_concat_h, overlap_mask
 
 
 def interpolate_feature_patch(
@@ -177,7 +177,7 @@ def drag_diffusion_update(
 def run_drag(
         source_image,  # 512,512,3 numpy image [0,255]
         image_with_clicks,  # 512 512 3, used only to store results
-        mask,  # 512, 512 numpy mask, 255 is inside
+        mask,  # 512, 512 numpy mask, 1 is inside
         prompt,
         points,  # list of pixel coordinates of [[handle], [target], [h2],[t2]] points
         inversion_strength=0.7,  # (0,1) - at which level optimization happens
@@ -257,7 +257,8 @@ def run_drag(
     # parsing points into handle and target
     handle_points = []
     target_points = []
-    # here, the point is in x,y coordinate
+    # here, the point is in x,y pixel coordinate on the full resolution image
+    # we transform them to resolution (sup_res_h, sup_res_w) for optimization
     for idx, point in enumerate(points):
         cur_point = torch.tensor(
             [
@@ -404,10 +405,61 @@ if __name__ == "__main__":
     with open('inputs.pkl', 'rb') as f:
         inputs = pickle.load(f)
     inputs['save_seq'] = False
-    run_drag(
-        **inputs,
-    )
 
+    # # run default from pickle file
+    # run_drag(
+    #     **inputs,
+    # )
+
+    points_l_512, sizes_l_512 = load_points_from_theater_json(
+        "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
+        canvas_hw=(512,512),
+    )
+    inpimg, input_drawings = load_and_draw(
+        "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
+        points_list=points_l_512,
+        sizes_list=sizes_l_512,
+        return_type="np",
+    )
+    
+    # inputs["source_image"] = inpimg
+    # inputs["points"] = points_l
+    # inputs["image_with_clicks"] = drawings
+
+    # print(inputs["source_image"])
+    print("----------")
+    
+    print(inputs.keys())
+    print(inputs["points"])
+    print("-- > points from json")
+    print(points_l_512)
+
+    print("----------")
+
+    out_img = run_drag(
+        source_image=inpimg,
+        image_with_clicks=input_drawings,
+        mask=inputs['mask'],
+        prompt="",
+        points=points_l_512,
+        save_seq=False,
+        n_pix_step=80,
+    )
+    # Convert the numpy array to a PIL Image
+    pil_out_img = Image.fromarray(out_img)
+
+    _, output_drawings = draw_on_image(pil_out_img, points_l_512, sizes_l_512)
+
+    input_with_mask = overlap_mask(Image.fromarray(inpimg), mask=inputs['mask'])
+
+    out_save = get_concat_h(
+        get_concat_h(
+            input_with_mask,
+            Image.fromarray(input_drawings)
+        ),
+        Image.fromarray(output_drawings),
+    )
+    out_save.save("out.png")
     
     
     
