@@ -7,6 +7,7 @@ def load_and_draw(
         image_path,
         points_list,
         sizes_list=None,
+        return_type="np",
 ):
     img = Image.open(image_path).convert('RGBA')
     return draw_on_image(img, points_list, sizes_list, return_type=return_type)
