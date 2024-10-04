@@ -87,6 +87,7 @@ def drag_diffusion_update(
             interp_res_h=args.sup_res_h,
             interp_res_w=args.sup_res_w,
         )
+        # F0 is torch.Size([1, 640, 256, 256])
         x_prev_0, _ = model.step(unet_output, t, init_code)
         # init_code_orig = copy.deepcopy(init_code)
 
@@ -104,11 +105,15 @@ def drag_diffusion_update(
     scaler = torch.cuda.amp.GradScaler()
     for step_idx in range(args.n_pix_step):
         with torch.autocast(device_type='cuda', dtype=torch.float16):
-            unet_output, F1 = model.forward_unet_features(init_code, t,
+            unet_output, F1 = model.forward_unet_features(
+                init_code, t,
                 encoder_hidden_states=text_embeddings,
-                layer_idx=args.unet_feature_idx, interp_res_h=args.sup_res_h, interp_res_w=args.sup_res_w)
+                layer_idx=args.unet_feature_idx,
+                interp_res_h=args.sup_res_h,
+                interp_res_w=args.sup_res_w,
+            )
             # F1 is tensor ([1, 640, 256, 256])
-            x_prev_updated,_ = model.step(unet_output, t, init_code)
+            x_prev_updated, _ = model.step(unet_output, t, init_code)
 
             # do point tracking to update handle points before computing motion supervision loss
             if step_idx != 0:
@@ -131,9 +136,13 @@ def drag_diffusion_update(
 
                 # motion supervision
                 # with boundary protection
-                r1, r2 = max(0,int(pi[0])-args.r_m), min(max_r,int(pi[0])+args.r_m+1)
-                c1, c2 = max(0,int(pi[1])-args.r_m), min(max_c,int(pi[1])+args.r_m+1)
-                f0_patch = F1[:,:,r1:r2, c1:c2].detach()
+                # select row and column around p_i
+                r1, r2 = max(0, int(pi[0]) - args.r_m), min(max_r, int(pi[0]) + args.r_m+1)
+                c1, c2 = max(0, int(pi[1]) - args.r_m), min(max_c, int(pi[1]) + args.r_m+1)
+                # slice F1 around handle point to get a term for eq (3)
+                # sg(F_q(z^k_t))
+                f0_patch = F1[:, :, r1:r2, c1:c2].detach()
+                # q + d_i is not on the grid, interpolate patch of the same size
                 f1_patch = interpolate_feature_patch(
                     feat=F1,
                     y1=r1+di[0],
@@ -141,6 +150,7 @@ def drag_diffusion_update(
                     x1=c1+di[1],
                     x2=c2+di[1],
                 )
+                # f0 has shape [1, n_features, 3, 3], same as f0_patch
 
                 # original code, without boundary protection
                 # f0_patch = F1[:,:,int(pi[0])-args.r_m:int(pi[0])+args.r_m+1, int(pi[1])-args.r_m:int(pi[1])+args.r_m+1].detach()
@@ -169,7 +179,7 @@ def run_drag(
         prompt,
         points,  # list of pixel coordinates of [[handle], [target], [h2],[t2]] points
         inversion_strength=0.7,  # (0,1) - at which level optimization happens
-        lam=0.1,  # opt parameter
+        lam=0.1,  # opt parameter, weight at mask term
         latent_lr=0.01,
         n_pix_step=80,  # n optimization steps
         model_path="runwayml/stable-diffusion-v1-5",  # "runwayml/stable-diffusion-v1-5"
@@ -179,27 +189,7 @@ def run_drag(
         start_layer=10,  # used in MutualSelfAttentionControl only -> the layer to start mutual self-attention control
         save_dir="./results",
         save_seq=True,
-    ):
-    # # Save inputs using pickle
-    # inputs = {
-    #     'source_image': source_image,
-    #     'image_with_clicks': image_with_clicks,
-    #     'mask': mask,
-    #     'prompt': prompt,
-    #     'points': points,
-    #     'inversion_strength': inversion_strength,
-    #     'lam': lam,
-    #     'latent_lr': latent_lr,
-    #     'n_pix_step': n_pix_step,
-    #     'model_path': model_path,
-    #     'vae_path': vae_path,
-    #     'lora_path': lora_path,
-    #     'start_step': start_step,
-    #     'start_layer': start_layer
-    # }
-    
-    # with open('inputs.pkl', 'wb') as f:
-    #     pickle.dump(inputs, f)
+        ):
 
     # initialize model
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -403,6 +393,7 @@ def run_drag(
     out_image = gen_image.cpu().permute(0, 2, 3, 1).numpy()[0]
     out_image = (out_image * 255).astype(np.uint8)
     return out_image
+
 
 if __name__ == "__main__":
     with open('inputs.pkl', 'rb') as f:
