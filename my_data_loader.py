@@ -1,6 +1,47 @@
 import json
 import numpy as np
-import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw
+
+
+def draw_on_image(
+        image_path,
+        points_list,
+        sizes_list=None,
+):
+    img = Image.open(image_path).convert('RGBA')
+    txt = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(txt)
+    for i in range(len(points_list) // 2):
+        handle, target = points_list[2 * i], points_list[2 * i + 1]
+        radius = 2
+        draw.ellipse(
+            [
+                handle[0] - radius, handle[1] - radius,
+                handle[0] + radius, handle[1] + radius
+            ],
+            outline='red', width=2
+        )
+        draw.ellipse(
+            [
+                target[0] - radius, target[1] - radius,
+                target[0] + radius, target[1] + radius
+            ],
+            outline='blue', width=2
+        )
+        draw.line([handle[0], handle[1], target[0], target[1]], fill='white', width=1)
+        if sizes_list is not None:
+            draw.rectangle(
+                xy = [
+                    handle[0] - sizes_list[i][0], handle[1] - sizes_list[i][1],
+                    handle[0] + sizes_list[i][0], handle[1] + sizes_list[i][1],
+                ],
+                outline='red',
+            )
+
+    out = Image.alpha_composite(img, txt)
+    out.save("test.png")
+    return np.array(out.convert("RGB"))
+
 
 
 def load_points_from_theater_json(
@@ -59,3 +100,9 @@ if __name__ == "__main__":
     points_l, sizes_l = load_points_from_theater_json(
         "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
     )
+    aa = draw_on_image(
+        "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
+        points_list=points_l,
+        sizes_list=sizes_l,
+    )
+    print(aa)
