@@ -401,8 +401,33 @@ def run_drag(
     return out_image
 
 
+configs = {
+    "portrait42": {
+        "image_path": "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
+        "json_path": "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
+        "default_inputs_path": 'inputs_portrait.pkl',
+        "known_id": 9,
+        "new_id": 7,
+        "lora_path": "lora_portrait/",
+    },
+    "dragbench_head": {
+        "image_path": "dragbench_head.png",
+        "json_path": "head.json",
+        "default_inputs_path": 'inputs_head.pkl',
+        "known_id": 0,
+        "new_id": 1,
+        "lora_path": "lora_head/",
+    }
+}
+
+
 if __name__ == "__main__":
-    with open('inputs_head.pkl', 'rb') as f:
+
+    # name = "portrait42"
+    name = "dragbench_head"
+    conf = configs[name]
+
+    with open(conf["default_inputs_path"], 'rb') as f:
         inputs = pickle.load(f)
     inputs['save_seq'] = False
 
@@ -412,27 +437,20 @@ if __name__ == "__main__":
     # )
 
     points_l_512, sizes_l_512 = load_points_from_theater_json(
-        # "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
-        "head.json",
-        canvas_hw=(512,512),
-        known_scene_id=0,
-        novel_scene_id=1,
+        conf["json_path"],
+        canvas_hw=(512, 512),
+        known_scene_id=conf["known_id"],
+        novel_scene_id=conf["new_id"],
     )
     inpimg, input_drawings = load_and_draw(
-        # "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
-        "dragbench_head.png",
+        conf["image_path"],
         points_list=points_l_512,
         sizes_list=sizes_l_512,
         return_type="np",
     )
-    
-    # inputs["source_image"] = inpimg
-    # inputs["points"] = points_l
-    # inputs["image_with_clicks"] = drawings
 
-    # print(inputs["source_image"])
     print("----------")
-    
+
     print(inputs.keys())
     print(inputs["points"])
     print("-- > points from json")
@@ -445,15 +463,16 @@ if __name__ == "__main__":
         image_with_clicks=input_drawings,
         mask=inputs['mask'],
         prompt="",
-        points=inputs["points"],
+        points=points_l_512,
         save_seq=False,
         n_pix_step=80,
-        lora_path="lora_head/"
+        lora_path=conf["lora_path"],
+        # lora_path="",
     )
     # Convert the numpy array to a PIL Image
     pil_out_img = Image.fromarray(out_img)
 
-    _, output_drawings = draw_on_image(pil_out_img, points_l_512, sizes_l_512)
+    _, output_drawings = draw_on_image(pil_out_img, points_l_512, sizes_l_512, draw_rect_around="target")
 
     input_with_mask = overlap_mask(Image.fromarray(inpimg), mask=inputs['mask'])
 
@@ -464,7 +483,7 @@ if __name__ == "__main__":
         ),
         Image.fromarray(output_drawings),
     )
-    out_save.save("out.png")
+    out_save.save(f"out_{name}.png")
     
     
     
