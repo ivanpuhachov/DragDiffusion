@@ -402,7 +402,7 @@ def run_drag(
 
 
 if __name__ == "__main__":
-    with open('inputs.pkl', 'rb') as f:
+    with open('inputs_head.pkl', 'rb') as f:
         inputs = pickle.load(f)
     inputs['save_seq'] = False
 
@@ -412,11 +412,15 @@ if __name__ == "__main__":
     # )
 
     points_l_512, sizes_l_512 = load_points_from_theater_json(
-        "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
+        # "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
+        "head.json",
         canvas_hw=(512,512),
+        known_scene_id=0,
+        novel_scene_id=1,
     )
     inpimg, input_drawings = load_and_draw(
-        "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
+        # "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
+        "dragbench_head.png",
         points_list=points_l_512,
         sizes_list=sizes_l_512,
         return_type="np",
@@ -441,9 +445,10 @@ if __name__ == "__main__":
         image_with_clicks=input_drawings,
         mask=inputs['mask'],
         prompt="",
-        points=points_l_512,
+        points=inputs["points"],
         save_seq=False,
         n_pix_step=80,
+        lora_path="lora_head/"
     )
     # Convert the numpy array to a PIL Image
     pil_out_img = Image.fromarray(out_img)
