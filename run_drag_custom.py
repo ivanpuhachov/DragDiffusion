@@ -26,6 +26,8 @@ from utils.ui_utils import preprocess_image
 from utils.drag_utils import point_tracking, check_handle_reach_target
 from utils.attn_utils import register_attention_editor_diffusers, MutualSelfAttentionControl
 
+from my_data_loader import draw_on_image, load_points_from_theater_json, load_and_draw
+
 
 def interpolate_feature_patch(
         feat,
@@ -184,7 +186,7 @@ def run_drag(
         n_pix_step=80,  # n optimization steps
         model_path="runwayml/stable-diffusion-v1-5",  # "runwayml/stable-diffusion-v1-5"
         vae_path="default",  # "default"
-        lora_path="",  # "./lora_tmp"
+        lora_path="./lora_tmp",  # "./lora_tmp"
         start_step=0,  # used in MutualSelfAttentionControl only -> the step to start mutual self-attention control
         start_layer=10,  # used in MutualSelfAttentionControl only -> the layer to start mutual self-attention control
         save_dir="./results",
@@ -274,7 +276,10 @@ def run_drag(
     # set lora
     if lora_path == "":
         print("applying default parameters")
+        # Disables custom attention processors and sets the default attention implementation.
+        # see Unet2DConditionModel.set_default_attn_processor()
         model.unet.set_default_attn_processor()
+        pass
     else:
         print("applying lora: " + lora_path)
         model.unet.load_attn_procs(lora_path)
