@@ -3,12 +3,22 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 
-def draw_on_image(
+def load_and_draw(
         image_path,
         points_list,
         sizes_list=None,
 ):
     img = Image.open(image_path).convert('RGBA')
+    return draw_on_image(img, points_list, sizes_list)
+
+
+def draw_on_image(
+        img,
+        points_list,
+        sizes_list=None,
+        return_type="np",
+):
+    img = img.convert('RGBA')
     txt = Image.new("RGBA", img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(txt)
     for i in range(len(points_list) // 2):
@@ -70,15 +80,17 @@ def load_points_from_theater_json(
         for x in data['scenes'][known_scene_id]['positions']
     ]
     print(known_positions)
+    print(" | | |")
 
     new_positions = [
         [
             # transform (x, y) to regular image coordinate frame (top left corner) with pixels
-            np.rint((x[0] + 1) * canvas_hw[1] / 2),
-            np.rint((1 - x[1]) * canvas_hw[0] / 2),
+            int(np.rint((x[0] + 1) * canvas_hw[1] / 2)),
+            int(np.rint((1 - x[1]) * canvas_hw[0] / 2)),
         ]
         for x in data['scenes'][novel_scene_id]['positions']
     ]
+    print(new_positions)
 
     points_list = []
     sizes_list = []
@@ -100,9 +112,9 @@ if __name__ == "__main__":
     points_l, sizes_l = load_points_from_theater_json(
         "/home/ivan/projects/dreamslicer/data/portrait42/paper_theater_data.json",
     )
-    aa = draw_on_image(
+    orig, drawn = load_and_draw(
         "/home/ivan/projects/dreamslicer/data/portrait42/image.png",
         points_list=points_l,
         sizes_list=sizes_l,
     )
-    print(aa)
+    print(orig)
