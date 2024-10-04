@@ -1,6 +1,9 @@
 """
 Usage from CLI:
 python run_lora_train_custom.py -i path/to/image.png -p "text prompt" -o path/to/output/
+python run_lora_train_custom.py -i lion512.png -o lora_lion/
+python run_lora_train_custom.py -i dragbench_head.png -o lora_head/
+
 """    
 
 import pickle
@@ -47,7 +50,7 @@ if __name__ == "__main__":
         prompt=text_prompt,
         model_path="runwayml/stable-diffusion-v1-5",
         save_lora_path=out_path,
-        lora_step=10,
+        lora_step=80,
     )
     
     
