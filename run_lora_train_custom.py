@@ -3,6 +3,7 @@ Usage from CLI:
 python run_lora_train_custom.py -i path/to/image.png -p "text prompt" -o path/to/output/
 python run_lora_train_custom.py -i lion512.png -o lora_lion/
 python run_lora_train_custom.py -i dragbench_head.png -o lora_head/
+python run_lora_train_custom.py -i portrait42.png -o lora_portrait/
 
 """    
 
