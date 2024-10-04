@@ -17,6 +17,7 @@ def draw_on_image(
         img,
         points_list,
         sizes_list=None,
+        draw_rect_around="handle",  # "handle" or "target"
         return_type="np",
 ):
     img = img.convert('RGBA')
@@ -41,13 +42,24 @@ def draw_on_image(
         )
         draw.line([handle[0], handle[1], target[0], target[1]], fill='white', width=1)
         if sizes_list is not None:
-            draw.rectangle(
-                xy = [
-                    handle[0] - sizes_list[i][0], handle[1] - sizes_list[i][1],
-                    handle[0] + sizes_list[i][0], handle[1] + sizes_list[i][1],
-                ],
-                outline='red',
-            )
+            if draw_rect_around == "handle":
+                draw.rectangle(
+                    xy=(
+                        handle[0] - sizes_list[i][0], handle[1] - sizes_list[i][1],
+                        handle[0] + sizes_list[i][0], handle[1] + sizes_list[i][1],
+                    ),
+                    outline='red',
+                )
+            elif draw_rect_around == "target":
+                draw.rectangle(
+                    xy=(
+                        target[0] - sizes_list[i][0], target[1] - sizes_list[i][1],
+                        target[0] + sizes_list[i][0], target[1] + sizes_list[i][1],
+                    ),
+                    outline='blue',
+                )
+            else:
+                raise NotImplementedError
 
     out = Image.alpha_composite(img, txt)
     if return_type == "np":
