@@ -66,7 +66,7 @@ def drag_diffusion_update(
         target_points,
         mask,
         args,
-    ):
+):
     """
     Optimize init_code by moving handle_points to target_points.
     """
@@ -128,6 +128,7 @@ def drag_diffusion_update(
 
             loss = 0.0
             _, _, max_r, max_c = F0.shape
+            patch_shapes = []
             for i in range(len(handle_points)):
                 pi, ti = handle_points[i], target_points[i]
                 # skip if the distance between target and source is less than 1
@@ -139,8 +140,10 @@ def drag_diffusion_update(
                 # motion supervision
                 # with boundary protection
                 # select row and column around p_i
-                r1, r2 = max(0, int(pi[0]) - args.r_m), min(max_r, int(pi[0]) + args.r_m+1)
-                c1, c2 = max(0, int(pi[1]) - args.r_m), min(max_c, int(pi[1]) + args.r_m+1)
+                # r1, r2 = max(0, int(pi[0]) - args.r_m), min(max_r, int(pi[0]) + args.r_m+1)
+                # c1, c2 = max(0, int(pi[1]) - args.r_m), min(max_c, int(pi[1]) + args.r_m+1)
+                r1, r2 = max(0, int(pi[0]) - args.rects[i][0]), min(max_r, int(pi[0]) + args.rects[i][0] + 1)
+                c1, c2 = max(0, int(pi[1]) - args.rects[i][1]), min(max_c, int(pi[1]) + args.rects[i][1] + 1)
                 # slice F1 around handle point to get a term for eq (3)
                 # sg(F_q(z^k_t))
                 f0_patch = F1[:, :, r1:r2, c1:c2].detach()
@@ -158,12 +161,13 @@ def drag_diffusion_update(
                 # f0_patch = F1[:,:,int(pi[0])-args.r_m:int(pi[0])+args.r_m+1, int(pi[1])-args.r_m:int(pi[1])+args.r_m+1].detach()
                 # f1_patch = interpolate_feature_patch(F1, pi[0] + di[0], pi[1] + di[1], args.r_m)
                 loss += ((2*args.r_m+1)**2)*F.l1_loss(f0_patch, f1_patch)
+                patch_shapes.append(f0_patch.shape)
 
             # masked region must stay unchanged
             if using_mask:
                 loss += args.lam * ((x_prev_updated-x_prev_0)*(1.0-interp_mask)).abs().sum()
             # loss += args.lam * ((init_code_orig-init_code)*(1.0-interp_mask)).abs().sum()
-            print('loss total=%f'%(loss.item()))
+            print(f'loss total={loss.item()} on patches {patch_shapes}')
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -191,6 +195,7 @@ def run_drag(
         start_layer=10,  # used in MutualSelfAttentionControl only -> the layer to start mutual self-attention control
         save_dir="./results",
         save_seq=True,
+        handle_whs: list = None,
         ):
 
     # initialize model
@@ -230,8 +235,8 @@ def run_drag(
 
     args.unet_feature_idx = [3]  # only use the output of the last UNet block
 
-    args.r_m = 1
-    args.r_p = 3
+    args.r_m = 1  # r1 in eq 3 (motion supervision)
+    args.r_p = 3  # r2 in eq 5 (point tracking)
     args.lam = lam
 
     args.lr = latent_lr
@@ -259,6 +264,7 @@ def run_drag(
     target_points = []
     # here, the point is in x,y pixel coordinate on the full resolution image
     # we transform them to resolution (sup_res_h, sup_res_w) for optimization
+    # note that we also flip it x, y coordinates and store (y, x)
     for idx, point in enumerate(points):
         cur_point = torch.tensor(
             [
@@ -273,6 +279,16 @@ def run_drag(
             target_points.append(cur_point)
     print('handle points:', handle_points)
     print('target points:', target_points)
+
+    handle_rect_whs = [[int(args.r_m), int(args.r_m)] for p in handle_points]
+    if handle_whs is not None:
+        for idx, wh in enumerate(handle_whs):
+            handle_rect_whs[idx] = [
+                int(wh[1] / full_h * args.sup_res_h),
+                int(wh[0] / full_w * args.sup_res_w),
+                ]
+    print("handle_rect_whs: ", handle_rect_whs)
+    args.rects = handle_rect_whs
 
     # set lora
     if lora_path == "":
@@ -410,7 +426,7 @@ configs = {
         "new_id": 7,
         "lora_path": "lora_portrait/",
     },
-    "dragbench_head": {
+    "head": {
         "image_path": "dragbench_head.png",
         "json_path": "head.json",
         "default_inputs_path": 'inputs_head.pkl',
@@ -423,8 +439,8 @@ configs = {
 
 if __name__ == "__main__":
 
-    # name = "portrait42"
-    name = "dragbench_head"
+    name = "portrait42"
+    # name = "head"
     conf = configs[name]
 
     with open(conf["default_inputs_path"], 'rb') as f:
@@ -442,6 +458,9 @@ if __name__ == "__main__":
         known_scene_id=conf["known_id"],
         novel_scene_id=conf["new_id"],
     )
+
+    print("sizes_l_512: ", sizes_l_512)
+
     inpimg, input_drawings = load_and_draw(
         conf["image_path"],
         points_list=points_l_512,
@@ -468,6 +487,7 @@ if __name__ == "__main__":
         n_pix_step=80,
         lora_path=conf["lora_path"],
         # lora_path="",
+        handle_whs=sizes_l_512,
     )
     # Convert the numpy array to a PIL Image
     pil_out_img = Image.fromarray(out_img)
