@@ -4,6 +4,11 @@
 # ytedance Inc..  
 # *************************************************************************
 
+"""
+This file is based of Diffusers example
+https://github.com/huggingface/diffusers/blob/v0.17.1/examples/dreambooth/train_dreambooth_lora.py
+"""
+
 import argparse
 import gc
 import hashlib
