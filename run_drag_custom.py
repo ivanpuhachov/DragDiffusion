@@ -181,7 +181,7 @@ def drag_diffusion_update(
 def run_drag(
         source_image,  # 512,512,3 numpy image [0,255]
         image_with_clicks,  # 512 512 3, used only to store results
-        mask,  # 512, 512 numpy mask, 1 is inside
+        mask,  # 512, 512 numpy mask, 255 is inside (see processing below)
         prompt,
         points,  # list of pixel coordinates of [[handle], [target], [h2],[t2]] points
         inversion_strength=0.7,  # (0,1) - at which level optimization happens
@@ -437,32 +437,38 @@ configs = {
 }
 
 
-if __name__ == "__main__":
-
-    name = "portrait42"
-    # name = "head"
-    conf = configs[name]
-
-    with open(conf["default_inputs_path"], 'rb') as f:
+def default_run():
+    with open('inputs_portrait.pkl', 'rb') as f:
         inputs = pickle.load(f)
     inputs['save_seq'] = False
 
-    # # run default from pickle file
-    # run_drag(
-    #     **inputs,
-    # )
+    # run default from pickle file
+    run_drag(
+        **inputs,
+    )
 
+
+def my_run(
+        json_data_path: str,
+        input_image_path: str,
+        lora_path: str,
+        save_log_as="test_log.png",
+        save_result_as="test_result.png",
+        mask=None,
+        known_scene_id=9,
+        new_scene_id=7,
+):
     points_l_512, sizes_l_512 = load_points_from_theater_json(
-        conf["json_path"],
+        json_data_path,
         canvas_hw=(512, 512),
-        known_scene_id=conf["known_id"],
-        novel_scene_id=conf["new_id"],
+        known_scene_id=known_scene_id,
+        novel_scene_id=new_scene_id,
     )
 
     print("sizes_l_512: ", sizes_l_512)
 
     inpimg, input_drawings = load_and_draw(
-        conf["image_path"],
+        input_image_path,
         points_list=points_l_512,
         sizes_list=sizes_l_512,
         return_type="np",
@@ -470,31 +476,36 @@ if __name__ == "__main__":
 
     print("----------")
 
-    print(inputs.keys())
-    print(inputs["points"])
+    # print(inputs.keys())
+    # print(inputs["points"])
     print("-- > points from json")
     print(points_l_512)
 
     print("----------")
 
+    if mask is None:
+        mask = np.ones((inpimg.shape[0], inpimg.shape[1])) * 255
+
     out_img = run_drag(
         source_image=inpimg,
         image_with_clicks=input_drawings,
-        mask=inputs['mask'],
+        mask=mask,
         prompt="",
         points=points_l_512,
         save_seq=False,
         n_pix_step=80,
-        lora_path=conf["lora_path"],
+        lora_path=lora_path,
         # lora_path="",
         handle_whs=sizes_l_512,
     )
     # Convert the numpy array to a PIL Image
     pil_out_img = Image.fromarray(out_img)
+    if save_result_as is not None:
+        pil_out_img.save(save_result_as)
 
     _, output_drawings = draw_on_image(pil_out_img, points_l_512, sizes_l_512, draw_rect_around="target")
 
-    input_with_mask = overlap_mask(Image.fromarray(inpimg), mask=inputs['mask'])
+    input_with_mask = overlap_mask(Image.fromarray(inpimg), mask=mask / mask.max())
 
     out_save = get_concat_h(
         get_concat_h(
@@ -503,7 +514,26 @@ if __name__ == "__main__":
         ),
         Image.fromarray(output_drawings),
     )
-    out_save.save(f"out_{name}.png")
-    
-    
-    
+    if save_log_as is not None:
+        out_save.save(save_log_as)
+    return out_img
+
+
+if __name__ == "__main__":
+    name = "portrait42"
+    # name = "head"
+    conf = configs[name]
+
+    with open('inputs_portrait.pkl', 'rb') as f:
+        inputs = pickle.load(f)
+
+    my_run(
+        input_image_path=conf["image_path"],
+        json_data_path=conf["json_path"],
+        lora_path=conf["lora_path"],
+        known_scene_id=conf["known_id"],
+        new_scene_id=conf["new_id"],
+        save_log_as=f"out_{name}.png",
+        mask=inputs["mask"],
+    )
+
