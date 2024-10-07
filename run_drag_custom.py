@@ -457,6 +457,7 @@ def my_run(
         mask=None,
         known_scene_id=9,
         new_scene_id=7,
+        use_rectangles=True,
 ):
     points_l_512, sizes_l_512 = load_points_from_theater_json(
         json_data_path,
@@ -496,7 +497,7 @@ def my_run(
         n_pix_step=80,
         lora_path=lora_path,
         # lora_path="",
-        handle_whs=sizes_l_512,
+        handle_whs=sizes_l_512 if use_rectangles else None,
     )
     # Convert the numpy array to a PIL Image
     pil_out_img = Image.fromarray(out_img)
@@ -533,7 +534,9 @@ if __name__ == "__main__":
         lora_path=conf["lora_path"],
         known_scene_id=conf["known_id"],
         new_scene_id=conf["new_id"],
-        save_log_as=f"out_{name}.png",
         mask=inputs["mask"],
+        use_rectangles=True,
+        save_result_as=f"out_{name}_b.png",
+        save_log_as=f"log_{name}.png",
     )
 
