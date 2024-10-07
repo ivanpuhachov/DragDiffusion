@@ -454,6 +454,7 @@ def my_run(
         lora_path: str,
         save_log_as="test_log.png",
         save_result_as="test_result.png",
+        save_result_drawing_as="test_result_drawing.png",
         mask=None,
         known_scene_id=9,
         new_scene_id=7,
@@ -471,7 +472,7 @@ def my_run(
     inpimg, input_drawings = load_and_draw(
         input_image_path,
         points_list=points_l_512,
-        sizes_list=sizes_l_512,
+        sizes_list=sizes_l_512 if use_rectangles else None,
         return_type="np",
     )
 
@@ -504,7 +505,15 @@ def my_run(
     if save_result_as is not None:
         pil_out_img.save(save_result_as)
 
-    _, output_drawings = draw_on_image(pil_out_img, points_l_512, sizes_l_512, draw_rect_around="target")
+    _, output_drawings = draw_on_image(
+        img=pil_out_img,
+        points_list=points_l_512,
+        sizes_list=sizes_l_512 if use_rectangles else None,
+        draw_rect_around="target",
+    )
+
+    if save_result_drawing_as is not None:
+        Image.fromarray(output_drawings).save(save_result_drawing_as)
 
     input_with_mask = overlap_mask(Image.fromarray(inpimg), mask=mask / mask.max())
 
