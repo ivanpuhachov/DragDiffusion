@@ -1,4 +1,5 @@
 # code copied from diff history
+# add default values
 # *************************************************************************
 # This file may have been modified by Bytedance Inc. (“Bytedance Inc.'s Mo-
 # difications”). All Bytedance Inc.'s Modifications are Copyright (2023) B-
@@ -15,6 +16,7 @@ from torchvision import transforms
 from accelerate import Accelerator
 from accelerate.utils import set_seed
 from PIL import Image
+import tqdm
 
 from transformers import AutoTokenizer, PretrainedConfig
 
@@ -110,13 +112,13 @@ def encode_prompt(text_encoder, input_ids, attention_mask, text_encoder_use_atte
 def train_lora(image,
     prompt,
     model_path,
-    vae_path,
     save_lora_path,
-    lora_step,
-    lora_lr,
-    lora_batch_size,
-    lora_rank,
-    progress,
+    lora_step=80,
+    vae_path="default",
+    lora_lr=5e-4,
+    lora_batch_size=4,
+    lora_rank=16,
+    progress=tqdm,
     save_interval=-1):
     # initialize accelerator
     accelerator = Accelerator(
