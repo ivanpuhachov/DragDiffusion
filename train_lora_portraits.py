@@ -2,6 +2,7 @@ import os
 import PIL
 import numpy as np
 from utils.lora_utils import train_lora
+from utils.train_lora_v070 import train_lora as train_lora_v070
 
 
 if __name__ == "__main__":
@@ -21,6 +22,7 @@ if __name__ == "__main__":
         image = np.array(image)
 
         out_lora_folder = os.path.join(main_folder, foldername, "LoRA")
+        # out_lora_folder = os.path.join(main_folder, foldername, "LoRA_0170")
 
         train_lora(
             image=image,
