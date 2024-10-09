@@ -32,6 +32,9 @@ class AttentionBase:
         return out
 
     def forward(self, q, k, v, is_cross, place_in_unet, num_heads, **kwargs):
+        # default attention operations
+        # scaled dot product
+        # then move heads to last dim
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
         out = rearrange(out, 'b h n d -> b n (h d)')
         return out
@@ -69,9 +72,16 @@ class MutualSelfAttentionControl(AttentionBase):
         Attention forward function
         """
         if is_cross or self.cur_step not in self.step_idx or self.cur_att_layer // 2 not in self.layer_idx:
+            # 1. not cross attention
+            # 2. denoising step not in the step range
+            # 3. attention layer not in the layer range
+
             return super().forward(q, k, v, is_cross, place_in_unet, num_heads, **kwargs)
 
+        # mutual self-attention control: transform SA layer to cross-attention with the source
+        
         if self.guidance_scale > 1.0:
+            # CFG is enabled, use Unconditioned and conditioned parts
             qu, qc = q[0:2], q[2:4]
             ku, kc = k[0:2], k[2:4]
             vu, vc = v[0:2], v[2:4]
@@ -89,8 +99,13 @@ class MutualSelfAttentionControl(AttentionBase):
             out_c = rearrange(out_c, 'b h n d -> b n (h d)')
 
             out = torch.cat([out_u, out_c], dim=0)
+        
         else:
+            # no CFG
+            # q has shape torch.Size([2, 4, 2048, 80])
+            # since latents = torch.cat([init_code_orig, updated_init_code], dim=0) -> batch_size = 2
             q = torch.cat([q[0:1], q[1:2]], dim=2)
+            # q has shape torch.Size([1, 8, 4096, 80])
             out = F.scaled_dot_product_attention(q, k[0:1], v[0:1], attn_mask=None, dropout_p=0.0, is_causal=False)
             out = torch.cat(out.chunk(2, dim=2), dim=0) # split the queries into source and target batch
             out = rearrange(out, 'b h n d -> b n (h d)')
@@ -98,7 +113,11 @@ class MutualSelfAttentionControl(AttentionBase):
 
 # forward function for default attention processor
 # modified from __call__ function of AttnProcessor in diffusers
-def override_attn_proc_forward(attn, editor, place_in_unet):
+def override_attn_proc_forward(
+        attn, 
+        editor: AttentionBase, 
+        place_in_unet,
+        ):
     def forward(x, encoder_hidden_states=None, attention_mask=None, context=None, mask=None):
         """
         The attention is similar to the original implementation of LDM CrossAttention class
